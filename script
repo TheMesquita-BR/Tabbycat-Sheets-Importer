@@ -9,6 +9,16 @@ let options = {
   }
 };
 
+function listTournaments() {
+  const res = UrlFetchApp.fetch(`${BASE_URL}/tournaments`, {
+    method: 'get',
+    headers: { authorization: 'Token ' + API_KEY }
+  });
+  JSON.parse(res.getContentText()).forEach(t =>
+    Logger.log(`slug: "${t.slug}" | nome: ${t.name}`)
+  );
+}
+
 function importInstitutions() {
   const url = `${BASE_URL}/institutions`;
   Logger.log("Fetching institutions from URL: " + url);
