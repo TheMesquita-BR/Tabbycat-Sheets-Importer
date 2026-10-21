@@ -6,10 +6,9 @@ I did some little improvements to it (fixed the institutions headers, added the 
 
 # Usage
 
-To get this working, you need to set up 3 properties at the project configuration:
+To get this working, you need to set up 3 properties in the [project settings, under script properties](https://developers.google.com/apps-script/guides/properties):
 
 - `API_KEY`: Accessible at the change password menu from the base URL
-- `BASE_URL`: The base URL of a Tabbycat instance (Example: https://iiicnd.calicotab.com) + /api/v1 at the end (so should look like this: https:/iiicnd.calicotab.com/api/v1) **(ALLWAYS USE HTTPS)**
-- `TOURNAMENT_SLUG': The tournament slug, found in the end of the URL (Example: https://iiicnd.calicotab.com/IIICND/ - IIICND would be the slug)
+- `BASE_URL`: The base URL of a Tabbycat instance (Example: https://iiicnd.calicotab.com) + /api/v1 at the end (so should look like this: https:/iiicnd.calicotab.com/api/v1) **(ALWAYS USE HTTPS - CalicoTab and most providers refuse non-secure connections)**
+- `TOURNAMENT_SLUG`: The tournament slug, found in the end of the URL (Example: https://iiicnd.calicotab.com/IIICND/ - IIICND would be the slug)
 
-- 
