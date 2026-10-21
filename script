@@ -1,0 +1,310 @@
+const { BASE_URL, TOURNAMENT_SLUG, API_KEY } = PropertiesService.getScriptProperties().getProperties();
+const TOURNAMENT_URL = `${BASE_URL}/tournaments/${TOURNAMENT_SLUG}`;
+
+let options = {
+  method: 'post',
+  contentType: 'application/json',
+  headers: {
+    authorization: 'Token ' + API_KEY
+  }
+};
+
+function importInstitutions() {
+  const url = `${BASE_URL}/institutions`;
+  Logger.log("Fetching institutions from URL: " + url);
+  
+  const req = UrlFetchApp.fetch(url, {
+    method: 'get',
+    contentType: 'application/json',
+    headers: {
+      authorization: 'Token ' + API_KEY
+    }
+  });
+
+  Logger.log("Response Code: " + req.getResponseCode());
+  const responseText = req.getContentText();
+  Logger.log("Response Text: " + responseText);
+  
+  if (req.getResponseCode() == 200) {
+    try {
+      const insts = {};
+      const data = JSON.parse(responseText);
+      data.forEach(({ name, url }) => { insts[name.trim()] = url; });
+      return insts;
+    } catch (error) {
+      Logger.log("Error parsing JSON: " + error);
+      throw new Error("Failed to parse institutions JSON");
+    }
+  } else {
+    throw new Error(`Failed to fetch institutions. Response: ${req.getResponseCode()}`);
+  }
+}
+
+function exportInstitutions() {
+  const subs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INSTITUTIONS").getDataRange().getValues();
+  
+  for (const [name, code, region] of subs) {
+    if (!name) continue;
+
+    options.payload = JSON.stringify({
+      name,
+      code,
+      region,
+    });
+
+    const url = `${BASE_URL}/institutions`;
+    Logger.log(`Sending institution data to: ${url}`);
+    
+    const req = UrlFetchApp.fetch(url, options);
+    const responseCode = req.getResponseCode();
+    Logger.log("Response Code: " + responseCode);
+
+    if (responseCode == 201) {
+      Logger.log(`Imported (i): ${name}`);
+    } else {
+      const responseText = req.getContentText();
+      Logger.log(`Error importing institution: ${responseText}`);
+      throw new Error(`Failed to import institution. Response: ${responseCode}`);
+    }
+  }
+}
+
+function exportTeams() {
+  const institutions = importInstitutions();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEAMS");
+  const dataRange = sheet.getDataRange();
+  const allValues = dataRange.getValues();
+  const headers = allValues.shift();
+
+  // Mapeo de cabeceras
+  const getColIndex = (colName) => headers.indexOf(colName);
+  
+  const TEAM_NAME_COL = getColIndex('teamName');
+  const INST_NAME_COL = getColIndex('instName');
+  const FULLNAME1_COL = getColIndex('fullName1');
+  const EMAIL1_COL = getColIndex('email1');
+  const GENDER1_COL = getColIndex('gender1');
+  const CAT1_COL = getColIndex('cat1');
+  const FULLNAME2_COL = getColIndex('fullName2');
+  const EMAIL2_COL = getColIndex('email2');
+  const GENDER2_COL = getColIndex('gender2');
+  const CAT2_COL = getColIndex('cat2');
+
+  for (const row of allValues) {
+    
+    const teamName = row[TEAM_NAME_COL];
+    const instName = row[INST_NAME_COL];
+    const fullName1 = row[FULLNAME1_COL];
+    const email1 = row[EMAIL1_COL];
+    const gender1 = row[GENDER1_COL];
+    const cat1 = row[CAT1_COL];
+    const fullName2 = row[FULLNAME2_COL];
+    const email2 = row[EMAIL2_COL];
+    const gender2 = row[GENDER2_COL];
+    const cat2 = row[CAT2_COL];
+
+    if (!fullName1 || !fullName2) continue;
+
+    // Variables ya definidas
+    const institution = instName?.trim() ? (institutions[instName.trim()] ?? null) : null;
+
+    const speakers = [
+      {
+        name: fullName1.trim(),
+        email: email1?.trim() || '',
+        phone: '',
+        gender: gender1?.trim() || '',
+        categories: cat1 ? cat1.split(',').map(c => c.trim()) : []
+      },
+      {
+        name: fullName2.trim(),
+        email: email2?.trim() || '',
+        phone: '',
+        gender: gender2?.trim() || '',
+        categories: cat2 ? cat2.split(',').map(c => c.trim()) : []
+      }
+    ];
+
+    options.payload = JSON.stringify({
+      reference: teamName,
+      code_name: `${fullName1.split(' ')[1]} & ${fullName2.split(' ')[1]}`,
+      institution,
+      speakers,
+      use_institution_prefix: false,
+      break_categories: [],
+      institution_conflicts: [],
+    });
+
+    const teamReq = UrlFetchApp.fetch(`${TOURNAMENT_URL}/teams`, { ...options, muteHttpExceptions: true });
+    const teamResponseCode = teamReq.getResponseCode();
+    Logger.log("Team Response Code: " + teamResponseCode);
+
+    if (teamResponseCode == 201) {
+      Logger.log(`Imported (t): ${teamName}`);
+    } else {
+      const teamResponseText = teamReq.getContentText();
+      Logger.log(`Error importing team: ${teamResponseText}`);
+      throw new Error(`Failed to import team. Response: ${teamResponseCode}`);
+    }
+  }
+}
+
+
+function exportAdjudicators() {
+  const institutions = importInstitutions();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ADJ");
+  if (!sheet) throw new Error('No se encontró la hoja "ADJ".');
+
+  // obtener todos los valores y quitar la primera fila (headers)
+  const all = sheet.getDataRange().getValues();
+  const rows = all.slice(1); // <-- evita intentar importar la fila de encabezado
+
+  function mapGender(g) {
+    if (!g) return '';
+    g = String(g).trim().toUpperCase();
+    if (g === 'M') return 'M';
+    if (g === 'F') return 'F';
+    if (g === 'O') return 'O';
+    return ''; // fallback si viene otro valor
+  }
+
+  function isValidEmail(e) {
+    if (!e) return false;
+    // validación básica que cubre la mayoría de casos
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(e);
+  }
+
+  // opcional: preparar hoja para listar emails inválidos (descomenta si quieres)
+  // let invalidSheet;
+  // try { invalidSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('INVALID_EMAILS') || SpreadsheetApp.getActiveSpreadsheet().insertSheet('INVALID_EMAILS'); }
+  // catch(e){ invalidSheet = null; }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const [name, instName, score, email, gender] = row;
+
+    // si no hay nombre, saltar (filas vacías)
+    if (!name || String(name).trim() === '') continue;
+
+    let institution = null;
+    let independent = false;
+
+    if (instName && institutions[instName.trim()]) {
+      institution = institutions[instName.trim()];
+    } else {
+      independent = true;
+    }
+
+    // normalizar email
+    const rawEmail = email ? String(email).trim() : '';
+    let cleanEmail = rawEmail ? rawEmail.toLowerCase() : '';
+
+    // si hay texto pero no es un email válido, lo dejamos vacío y lo registramos
+    if (cleanEmail && !isValidEmail(cleanEmail)) {
+      Logger.log(`Fila ${i+2}: Email inválido para "${name}": "${rawEmail}". Enviando cadena vacía en su lugar.`);
+      // Si prefieres saltar la fila en vez de enviar email vacío, descomenta la línea siguiente:
+      // continue;
+
+      // registrar en hoja opcional:
+      // if (invalidSheet) invalidSheet.appendRow([new Date(), i+2, name, rawEmail]);
+      cleanEmail = ''; // enviar vacío para evitar el error de la API
+    }
+
+    options.payload = JSON.stringify({
+      name: String(name).trim(),
+      institution: institution,
+      phone: '',
+      email: cleanEmail,                     // email validado/limpio o ''
+      base_score: parseFloat(score) || 0.0,
+      independent: independent,
+      adj_core: false,
+      gender: mapGender(gender),             // male/female/other o ''
+      institution_conflicts: [],
+      team_conflicts: [],
+      adjudicator_conflicts: [],
+    });
+
+    const adjReq = UrlFetchApp.fetch(`${TOURNAMENT_URL}/adjudicators`, { ...options, muteHttpExceptions: true });
+    const adjResponseCode = adjReq.getResponseCode();
+    Logger.log("Adjudicator Response Code: " + adjResponseCode);
+
+    if (adjResponseCode == 201) {
+      Logger.log(`Imported (a): ${name}`);
+    } else {
+      const adjResponseText = adjReq.getContentText();
+      Logger.log(`Error importing adjudicator: ${adjResponseText}`);
+      throw new Error(`Failed to import adjudicator. Response: ${adjResponseCode}`);
+    }
+  }
+}
+
+
+function importJudgeAllocations() {
+  const roundsUrl = `${TOURNAMENT_URL}/rounds`;
+  const roundsResponse = UrlFetchApp.fetch(roundsUrl, {
+    method: 'get',
+    contentType: 'application/json',
+    headers: {
+      authorization: 'Token ' + API_KEY
+    }
+  });
+
+  const rounds = JSON.parse(roundsResponse.getContentText());
+
+  const judgeAllocations = {};
+  const roundNames = [];
+
+  for (const round of rounds) {
+    const roundName = `Ronda ${round.seq}`;
+    roundNames.push(roundName);
+
+    const panelsUrl = `${TOURNAMENT_URL}/rounds/${round.id}/panels`;
+    const panelsResponse = UrlFetchApp.fetch(panelsUrl, {
+      method: 'get',
+      contentType: 'application/json',
+      headers: {
+        authorization: 'Token ' + API_KEY
+      }
+    });
+
+    const panels = JSON.parse(panelsResponse.getContentText());
+
+    for (const panel of panels) {
+      for (const adj of panel.adjudicators) {
+        const name = adj.adjudicator.name;
+        if (!judgeAllocations[name]) {
+          judgeAllocations[name] = {};
+        }
+        judgeAllocations[name][roundName] = "X";
+      }
+    }
+  }
+
+  // Crear hoja o limpiar
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("ADJ ALLOCATIONS");
+  if (!sheet) {
+    sheet = ss.insertSheet("ADJ ALLOCATIONS");
+  } else {
+    sheet.clearContents();
+  }
+
+  // Encabezados
+  const headers = ["Nombre de la jueza", ...roundNames];
+  const data = [headers];
+
+  // Ordenar nombres de juezas
+  const sortedNames = Object.keys(judgeAllocations).sort();
+
+  for (const name of sortedNames) {
+    const row = [name];
+    for (const round of roundNames) {
+      row.push(judgeAllocations[name][round] || "");
+    }
+    data.push(row);
+  }
+
+  // Escribir a la hoja
+  sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+}
