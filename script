@@ -9,46 +9,6 @@ let options = {
   }
 };
 
-function listTournaments() {
-  const res = UrlFetchApp.fetch(`${BASE_URL}/tournaments`, {
-    method: 'get',
-    headers: { authorization: 'Token ' + API_KEY }
-  });
-  JSON.parse(res.getContentText()).forEach(t =>
-    Logger.log(`slug: "${t.slug}" | nome: ${t.name}`)
-  );
-}
-
-function importInstitutions() {
-  const url = `${BASE_URL}/institutions`;
-  Logger.log("Fetching institutions from URL: " + url);
-  
-  const req = UrlFetchApp.fetch(url, {
-    method: 'get',
-    contentType: 'application/json',
-    headers: {
-      authorization: 'Token ' + API_KEY
-    }
-  });
-
-  Logger.log("Response Code: " + req.getResponseCode());
-  const responseText = req.getContentText();
-  Logger.log("Response Text: " + responseText);
-  
-  if (req.getResponseCode() == 200) {
-    try {
-      const insts = {};
-      const data = JSON.parse(responseText);
-      data.forEach(({ name, url }) => { insts[name.trim()] = url; });
-      return insts;
-    } catch (error) {
-      Logger.log("Error parsing JSON: " + error);
-      throw new Error("Failed to parse institutions JSON");
-    }
-  } else {
-    throw new Error(`Failed to fetch institutions. Response: ${req.getResponseCode()}`);
-  }
-}
 
 function exportInstitutions() {
   const subs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INSTITUTIONS").getDataRange().getValues();
@@ -83,13 +43,36 @@ function exportInstitutions() {
 function exportTeams() {
   const institutions = importInstitutions();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEAMS");
-  const dataRange = sheet.getDataRange();
-  const allValues = dataRange.getValues();
+  const allValues = sheet.getDataRange().getValues();
   const headers = allValues.shift();
 
-  // Mapeo de cabeceras
+  // --- Categorias de orador (nome/slug -> URL), embutido ---
+  const catsRes = UrlFetchApp.fetch(`${TOURNAMENT_URL}/speaker-categories`, {
+    method: 'get',
+    headers: { authorization: 'Token ' + API_KEY }
+  });
+  const speakerCats = {};
+  JSON.parse(catsRes.getContentText()).forEach(c => {
+    speakerCats[c.name.trim().toLowerCase()] = c.url;
+    speakerCats[c.slug.trim().toLowerCase()] = c.url;
+  });
+
+  const toCatUrls = (str) => {
+    if (!str) return [];
+    return String(str).split(',')
+      .map(c => c.trim().toLowerCase())
+      .filter(Boolean)
+      .map(c => {
+        const url = speakerCats[c];
+        if (!url) Logger.log(`Categoria não encontrada: "${c}"`);
+        return url;
+      })
+      .filter(Boolean);
+  };
+
+  // --- Mapeamento de cabeçalhos ---
   const getColIndex = (colName) => headers.indexOf(colName);
-  
+
   const TEAM_NAME_COL = getColIndex('teamName');
   const INST_NAME_COL = getColIndex('instName');
   const FULLNAME1_COL = getColIndex('fullName1');
@@ -102,7 +85,6 @@ function exportTeams() {
   const CAT2_COL = getColIndex('cat2');
 
   for (const row of allValues) {
-    
     const teamName = row[TEAM_NAME_COL];
     const instName = row[INST_NAME_COL];
     const fullName1 = row[FULLNAME1_COL];
@@ -116,7 +98,6 @@ function exportTeams() {
 
     if (!fullName1 || !fullName2) continue;
 
-    // Variables ya definidas
     const institution = instName?.trim() ? (institutions[instName.trim()] ?? null) : null;
 
     const speakers = [
@@ -125,14 +106,14 @@ function exportTeams() {
         email: email1?.trim() || '',
         phone: '',
         gender: gender1?.trim() || '',
-        categories: cat1 ? cat1.split(',').map(c => c.trim()) : []
+        categories: toCatUrls(cat1)
       },
       {
         name: fullName2.trim(),
         email: email2?.trim() || '',
         phone: '',
         gender: gender2?.trim() || '',
-        categories: cat2 ? cat2.split(',').map(c => c.trim()) : []
+        categories: toCatUrls(cat2)
       }
     ];
 
@@ -153,13 +134,42 @@ function exportTeams() {
     if (teamResponseCode == 201) {
       Logger.log(`Imported (t): ${teamName}`);
     } else {
-      const teamResponseText = teamReq.getContentText();
-      Logger.log(`Error importing team: ${teamResponseText}`);
+      Logger.log(`Error importing team "${teamName}": ${teamReq.getContentText()}`);
       throw new Error(`Failed to import team. Response: ${teamResponseCode}`);
     }
   }
 }
 
+function importInstitutions() {
+  const url = `${BASE_URL}/institutions`;
+  Logger.log("Fetching institutions from URL: " + url);
+  
+  const req = UrlFetchApp.fetch(url, {
+    method: 'get',
+    contentType: 'application/json',
+    headers: {
+      authorization: 'Token ' + API_KEY
+    }
+  });
+
+  Logger.log("Response Code: " + req.getResponseCode());
+  const responseText = req.getContentText();
+  Logger.log("Response Text: " + responseText);
+  
+  if (req.getResponseCode() == 200) {
+    try {
+      const insts = {};
+      const data = JSON.parse(responseText);
+      data.forEach(({ name, url }) => { insts[name.trim()] = url; });
+      return insts;
+    } catch (error) {
+      Logger.log("Error parsing JSON: " + error);
+      throw new Error("Failed to parse institutions JSON");
+    }
+  } else {
+    throw new Error(`Failed to fetch institutions. Response: ${req.getResponseCode()}`);
+  }
+}
 
 function exportAdjudicators() {
   const institutions = importInstitutions();
@@ -250,6 +260,29 @@ function exportAdjudicators() {
   }
 }
 
+
+function importSpeakerCategories() {
+  const res = UrlFetchApp.fetch(`${TOURNAMENT_URL}/speaker-categories`, {
+    method: 'get',
+    headers: { authorization: 'Token ' + API_KEY }
+  });
+  const cats = {};
+  JSON.parse(res.getContentText()).forEach(c => {
+    cats[c.name.trim().toLowerCase()] = c.url;
+    cats[c.slug.trim().toLowerCase()] = c.url;
+  });
+  return cats;
+}
+
+function listTournaments() {
+  const res = UrlFetchApp.fetch(`${BASE_URL}/tournaments`, {
+    method: 'get',
+    headers: { authorization: 'Token ' + API_KEY }
+  });
+  JSON.parse(res.getContentText()).forEach(t =>
+    Logger.log(`slug: "${t.slug}" | nome: ${t.name}`)
+  );
+}
 
 function importJudgeAllocations() {
   const roundsUrl = `${TOURNAMENT_URL}/rounds`;
