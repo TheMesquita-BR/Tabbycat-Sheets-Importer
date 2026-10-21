@@ -52,7 +52,8 @@ function importInstitutions() {
 
 function exportInstitutions() {
   const subs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INSTITUTIONS").getDataRange().getValues();
-  
+  subs.shift(); // remove o cabeçalho
+
   for (const [name, code, region] of subs) {
     if (!name) continue;
 
