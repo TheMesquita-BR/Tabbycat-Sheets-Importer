@@ -142,36 +142,6 @@ function exportTeams() {
   }
 }
 
-function importInstitutions() {
-  const url = `${BASE_URL}/institutions`;
-  Logger.log("Fetching institutions from URL: " + url);
-  
-  const req = UrlFetchApp.fetch(url, {
-    method: 'get',
-    contentType: 'application/json',
-    headers: {
-      authorization: 'Token ' + API_KEY
-    }
-  });
-
-  Logger.log("Response Code: " + req.getResponseCode());
-  const responseText = req.getContentText();
-  Logger.log("Response Text: " + responseText);
-  
-  if (req.getResponseCode() == 200) {
-    try {
-      const insts = {};
-      const data = JSON.parse(responseText);
-      data.forEach(({ name, url }) => { insts[name.trim()] = url; });
-      return insts;
-    } catch (error) {
-      Logger.log("Error parsing JSON: " + error);
-      throw new Error("Failed to parse institutions JSON");
-    }
-  } else {
-    throw new Error(`Failed to fetch institutions. Response: ${req.getResponseCode()}`);
-  }
-}
 
 function exportAdjudicators() {
   const institutions = importInstitutions();
@@ -262,6 +232,15 @@ function exportAdjudicators() {
   }
 }
 
+function listTournaments() {
+  const res = UrlFetchApp.fetch(`${BASE_URL}/tournaments`, {
+    method: 'get',
+    headers: { authorization: 'Token ' + API_KEY }
+  });
+  JSON.parse(res.getContentText()).forEach(t =>
+    Logger.log(`slug: "${t.slug}" | nome: ${t.name}`)
+  );
+}
 
 function importSpeakerCategories() {
   const res = UrlFetchApp.fetch(`${TOURNAMENT_URL}/speaker-categories`, {
@@ -276,14 +255,35 @@ function importSpeakerCategories() {
   return cats;
 }
 
-function listTournaments() {
-  const res = UrlFetchApp.fetch(`${BASE_URL}/tournaments`, {
+function importInstitutions() {
+  const url = `${BASE_URL}/institutions`;
+  Logger.log("Fetching institutions from URL: " + url);
+  
+  const req = UrlFetchApp.fetch(url, {
     method: 'get',
-    headers: { authorization: 'Token ' + API_KEY }
+    contentType: 'application/json',
+    headers: {
+      authorization: 'Token ' + API_KEY
+    }
   });
-  JSON.parse(res.getContentText()).forEach(t =>
-    Logger.log(`slug: "${t.slug}" | nome: ${t.name}`)
-  );
+
+  Logger.log("Response Code: " + req.getResponseCode());
+  const responseText = req.getContentText();
+  Logger.log("Response Text: " + responseText);
+  
+  if (req.getResponseCode() == 200) {
+    try {
+      const insts = {};
+      const data = JSON.parse(responseText);
+      data.forEach(({ name, url }) => { insts[name.trim()] = url; });
+      return insts;
+    } catch (error) {
+      Logger.log("Error parsing JSON: " + error);
+      throw new Error("Failed to parse institutions JSON");
+    }
+  } else {
+    throw new Error(`Failed to fetch institutions. Response: ${req.getResponseCode()}`);
+  }
 }
 
 function importJudgeAllocations() {
