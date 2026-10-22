@@ -75,6 +75,7 @@ function exportTeams() {
 
   const TEAM_NAME_COL = getColIndex('teamName');
   const INST_NAME_COL = getColIndex('instName');
+  const CODE_NAME_COL = getColIndex('codeName');
   const FULLNAME1_COL = getColIndex('fullName1');
   const EMAIL1_COL = getColIndex('email1');
   const GENDER1_COL = getColIndex('gender1');
@@ -87,6 +88,7 @@ function exportTeams() {
   for (const row of allValues) {
     const teamName = row[TEAM_NAME_COL];
     const instName = row[INST_NAME_COL];
+    const codeName = CODE_NAME_COL >= 0 ? String(row[CODE_NAME_COL] ?? '').trim() : '';
     const fullName1 = row[FULLNAME1_COL];
     const email1 = row[EMAIL1_COL];
     const gender1 = row[GENDER1_COL];
@@ -119,7 +121,7 @@ function exportTeams() {
 
     options.payload = JSON.stringify({
       reference: teamName,
-      code_name: `${fullName1.split(' ')[1]} & ${fullName2.split(' ')[1]}`,
+      code_name: codeName || `${fullName1.split(' ')[1]} & ${fullName2.split(' ')[1]}`,
       institution,
       speakers,
       use_institution_prefix: false,
