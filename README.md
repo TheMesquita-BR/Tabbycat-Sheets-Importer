@@ -15,6 +15,8 @@ To get this working, you need to set up 3 properties in the [project settings, u
 
 ### Sheets Tab
 
+***[Here you can find a example sheet](https://docs.google.com/spreadsheets/d/1DmP0cENFCP46L2cn11m6agC8gZi9UXLsP4kFDNl5JaQ/edit?usp=sharing), already filled with some Brazilian institutions.***  
+
 This script expects the data to be displaced in 3 tabs:
 
 - `ADJ`: For judges data
